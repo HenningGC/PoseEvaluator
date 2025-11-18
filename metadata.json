@@ -1,0 +1,7 @@
+{
+  "name": "PoseMaster AI",
+  "description": "A real-time exercise counter and form evaluator using computer vision.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
