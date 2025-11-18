@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PoseEvaluator</string>
+    <string name="title_activity_main">PoseEvaluator</string>
+    <string name="package_name">com.poseevaluator.app</string>
+    <string name="custom_url_scheme">com.poseevaluator.app</string>
+</resources>
