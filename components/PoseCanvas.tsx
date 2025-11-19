@@ -85,19 +85,7 @@ const PoseCanvas: React.FC<PoseCanvasProps> = ({ exerciseType, onUpdate }) => {
               const landmarks = result.landmarks[0] as unknown as Landmark[];
               const drawingUtils = new DrawingUtils(ctx);
               
-              // Draw landmarks
-              drawingUtils.drawLandmarks(result.landmarks[0], {
-                radius: (data) => DrawingUtils.lerp(data.from!.z, -0.15, 0.1, 5, 1),
-                color: exerciseStateRef.current.isCorrectForm ? "#4ade80" : "#ef4444",
-                lineWidth: 2
-              });
-              
-              drawingUtils.drawConnectors(result.landmarks[0], PoseLandmarker.POSE_CONNECTIONS, {
-                 color: exerciseStateRef.current.isCorrectForm ? "#ffffff" : "#ef4444",
-                 lineWidth: 4
-              });
-
-              // Process Exercise Logic
+              // Process Exercise Logic first to get state
               let newState = { ...exerciseStateRef.current };
               
               if (exerciseType === ExerciseType.PUSHUP) {
@@ -117,6 +105,27 @@ const PoseCanvas: React.FC<PoseCanvasProps> = ({ exerciseType, onUpdate }) => {
                     lastFrameTimeRef.current = 0; // Stop counting if form breaks
                 }
               }
+              
+              // Determine colors based on state
+              const landmarksNeedingImprovement = new Set(newState.landmarksNeedingImprovement || []);
+              const isVisibilityIssue = newState.visibilityIssue || false;
+              
+              // Draw landmarks with conditional colors
+              drawingUtils.drawLandmarks(result.landmarks[0], {
+                radius: (data) => DrawingUtils.lerp(data.from!.z, -0.15, 0.1, 5, 1),
+                color: (data) => {
+                  const index = result.landmarks[0].indexOf(data.from!);
+                  if (isVisibilityIssue) return "#ef4444"; // Red for visibility issues
+                  if (landmarksNeedingImprovement.has(index)) return "#f97316"; // Orange for form issues
+                  return "#4ade80"; // Green for good form
+                },
+                lineWidth: 2
+              });
+              
+              drawingUtils.drawConnectors(result.landmarks[0], PoseLandmarker.POSE_CONNECTIONS, {
+                 color: isVisibilityIssue ? "#ef4444" : (newState.isCorrectForm ? "#ffffff" : "#f97316"),
+                 lineWidth: 4
+              });
 
               // Update Refs and Parent
               exerciseStateRef.current = newState;

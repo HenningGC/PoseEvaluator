@@ -31,6 +31,8 @@ export const processPushup = (landmarks: Landmark[], state: ExerciseState): Exer
   if (!isLeftKneeVisible && !isRightKneeVisible) {
       newState.feedback = "Knees must be visible";
       newState.isCorrectForm = false;
+      newState.visibilityIssue = true;
+      newState.landmarksNeedingImprovement = [POSE_LANDMARKS.LEFT_KNEE, POSE_LANDMARKS.RIGHT_KNEE];
       return newState;
   }
 
@@ -60,11 +62,15 @@ export const processPushup = (landmarks: Landmark[], state: ExerciseState): Exer
   if (kneeAngle < LEG_EXTENDED_THRESH) {
     newState.feedback = "Straighten Legs";
     newState.isCorrectForm = false;
+    newState.visibilityIssue = false;
+    newState.landmarksNeedingImprovement = [POSE_LANDMARKS.LEFT_KNEE, POSE_LANDMARKS.RIGHT_KNEE, POSE_LANDMARKS.LEFT_HIP, POSE_LANDMARKS.RIGHT_HIP];
     return newState;
   }
   
   // If legs are straight, form is considered correct for now
   newState.isCorrectForm = true;
+  newState.visibilityIssue = false;
+  newState.landmarksNeedingImprovement = [];
 
   // 2. Rep Counting Logic
   if (elbowAngle >= UP_THRESH) {
@@ -118,6 +124,8 @@ export const processSquat = (landmarks: Landmark[], state: ExerciseState): Exerc
   if (!isLeftVisible && !isRightVisible) {
     newState.feedback = "Full body visible?";
     newState.isCorrectForm = false;
+    newState.visibilityIssue = true;
+    newState.landmarksNeedingImprovement = [POSE_LANDMARKS.LEFT_HIP, POSE_LANDMARKS.RIGHT_HIP, POSE_LANDMARKS.LEFT_KNEE, POSE_LANDMARKS.RIGHT_KNEE];
     return newState;
   }
 
@@ -157,11 +165,15 @@ export const processSquat = (landmarks: Landmark[], state: ExerciseState): Exerc
   if (checkLean && hipAngle < TORSO_LEAN_MAX) {
     newState.feedback = "Keep Chest Up";
     newState.isCorrectForm = false;
+    newState.visibilityIssue = false;
+    newState.landmarksNeedingImprovement = [POSE_LANDMARKS.LEFT_SHOULDER, POSE_LANDMARKS.RIGHT_SHOULDER, POSE_LANDMARKS.LEFT_HIP, POSE_LANDMARKS.RIGHT_HIP];
     return newState;
   }
 
   // If form passes check
   newState.isCorrectForm = true;
+  newState.visibilityIssue = false;
+  newState.landmarksNeedingImprovement = [];
 
   // Rep Counting
   if (kneeAngle >= UP_THRESH) {
@@ -206,10 +218,14 @@ export const processPlank = (landmarks: Landmark[], state: ExerciseState): Exerc
   if (isStraight) {
     newState.feedback = "Hold it!";
     newState.isCorrectForm = true;
+    newState.visibilityIssue = false;
+    newState.landmarksNeedingImprovement = [];
     // Timer handling is done in the main loop, but we flag it as valid here
   } else {
     newState.feedback = "Keep hips aligned";
     newState.isCorrectForm = false;
+    newState.visibilityIssue = false;
+    newState.landmarksNeedingImprovement = [POSE_LANDMARKS.LEFT_SHOULDER, POSE_LANDMARKS.LEFT_HIP, POSE_LANDMARKS.LEFT_ANKLE];
   }
 
   return newState;
