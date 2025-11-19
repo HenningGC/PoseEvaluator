@@ -122,10 +122,27 @@ const PoseCanvas: React.FC<PoseCanvasProps> = ({ exerciseType, onUpdate }) => {
                 lineWidth: 2
               });
               
-              drawingUtils.drawConnectors(result.landmarks[0], PoseLandmarker.POSE_CONNECTIONS, {
-                 color: isVisibilityIssue ? "#ef4444" : (newState.isCorrectForm ? "#ffffff" : "#f97316"),
-                 lineWidth: 4
-              });
+              // Draw connectors with selective coloring
+              const connections = PoseLandmarker.POSE_CONNECTIONS;
+              for (const connection of connections) {
+                // MediaPipe Connection type has start and end properties
+                const startIdx = (connection as any).start ?? 0;
+                const endIdx = (connection as any).end ?? 0;
+                const startNeedsImprovement = landmarksNeedingImprovement.has(startIdx);
+                const endNeedsImprovement = landmarksNeedingImprovement.has(endIdx);
+                
+                let connectionColor = "#ffffff"; // Default white for good form
+                if (isVisibilityIssue) {
+                  connectionColor = "#ef4444"; // Red for visibility issues
+                } else if (startNeedsImprovement || endNeedsImprovement) {
+                  connectionColor = "#f97316"; // Orange if either endpoint needs improvement
+                }
+                
+                drawingUtils.drawConnectors(result.landmarks[0], [connection], {
+                  color: connectionColor,
+                  lineWidth: 4
+                });
+              }
 
               // Update Refs and Parent
               exerciseStateRef.current = newState;
