@@ -325,9 +325,10 @@ class SquatCounter {
 
   private warningFromMetrics(m: SquatMetrics): string {
     if (!m.legsVisible) return 'Keep legs in frame';
-    if (this.state !== SquatState.DOWN && m.kneeAngle > this.downThresh + 12.0) return 'Go deeper';
-    if (this.state !== SquatState.DOWN && !m.hipBelowKnee) return 'Drop hips below knees';
-    if (this.state === SquatState.UP && m.kneeAngle < this.upThresh - 10.0) return 'Stand up fully';
+    // Only warn about depth when actively going down (not when standing at top)
+    if (this.state === SquatState.DOWN && !m.standing && m.kneeAngle > this.downThresh + 12.0) return 'Go deeper';
+    if (this.state === SquatState.DOWN && !m.hipBelowKnee && !m.standing) return 'Drop hips below knees';
+    if (this.state === SquatState.DOWN && m.kneeAngle < this.upThresh - 10.0) return 'Stand up fully';
     if (!m.kneeOverFootOK) return 'Align knee over foot';
     if (m.hipAngle < this.torsoLeanMax) return 'Keep chest up';
     return '';
@@ -838,96 +839,69 @@ export const processPushup = (landmarks: Landmark[], state: ExerciseState): Exer
 };
 
 export const processSquat = (landmarks: Landmark[], state: ExerciseState): ExerciseState => {
-  const VISIBILITY_THRESH = 0.5;
-
-  // Key Landmarks
-  const leftShoulder = landmarks[POSE_LANDMARKS.LEFT_SHOULDER];
-  const leftHip = landmarks[POSE_LANDMARKS.LEFT_HIP];
-  const leftKnee = landmarks[POSE_LANDMARKS.LEFT_KNEE];
-  const leftAnkle = landmarks[POSE_LANDMARKS.LEFT_ANKLE];
-
-  const rightShoulder = landmarks[POSE_LANDMARKS.RIGHT_SHOULDER];
-  const rightHip = landmarks[POSE_LANDMARKS.RIGHT_HIP];
-  const rightKnee = landmarks[POSE_LANDMARKS.RIGHT_KNEE];
-  const rightAnkle = landmarks[POSE_LANDMARKS.RIGHT_ANKLE];
-
-  // Gate: Check visibility of Hip and Knee
-  const isLeftVisible = (leftHip.visibility || 0) > VISIBILITY_THRESH && (leftKnee.visibility || 0) > VISIBILITY_THRESH;
-  const isRightVisible = (rightHip.visibility || 0) > VISIBILITY_THRESH && (rightKnee.visibility || 0) > VISIBILITY_THRESH;
-
-  let newState = { ...state };
-
-  if (!isLeftVisible && !isRightVisible) {
-    newState.feedback = "Full body visible?";
-    newState.isCorrectForm = false;
-    newState.visibilityIssue = true;
-    newState.landmarksNeedingImprovement = [POSE_LANDMARKS.LEFT_HIP, POSE_LANDMARKS.RIGHT_HIP, POSE_LANDMARKS.LEFT_KNEE, POSE_LANDMARKS.RIGHT_KNEE];
-    return newState;
-  }
-
-  let kneeAngle = 0;
-  let hipAngle = 180;
-  let checkLean = false;
-
-  // Calculate angles
-  if (isLeftVisible && isRightVisible) {
-    const leftLegAngle = calculateAngle2D(toPoint(leftHip, 1, 1), toPoint(leftKnee, 1, 1), toPoint(leftAnkle, 1, 1));
-    const rightLegAngle = calculateAngle2D(toPoint(rightHip, 1, 1), toPoint(rightKnee, 1, 1), toPoint(rightAnkle, 1, 1));
-    kneeAngle = (leftLegAngle + rightLegAngle) / 2;
-    checkLean = false;
-  } else if (isLeftVisible) {
-    kneeAngle = calculateAngle2D(toPoint(leftHip, 1, 1), toPoint(leftKnee, 1, 1), toPoint(leftAnkle, 1, 1));
-    hipAngle = calculateAngle2D(toPoint(leftShoulder, 1, 1), toPoint(leftHip, 1, 1), toPoint(leftKnee, 1, 1));
-    checkLean = true;
-  } else {
-    kneeAngle = calculateAngle2D(toPoint(rightHip, 1, 1), toPoint(rightKnee, 1, 1), toPoint(rightAnkle, 1, 1));
-    hipAngle = calculateAngle2D(toPoint(rightShoulder, 1, 1), toPoint(rightHip, 1, 1), toPoint(rightKnee, 1, 1));
-    checkLean = true;
-  }
-
-  // Thresholds
-  const UP_THRESH = 165.0;
-  const DOWN_THRESH = 95.0;
-  const TORSO_LEAN_MAX = 55.0;
-
-  // Form Check: Torso Lean
-  if (checkLean && hipAngle < TORSO_LEAN_MAX) {
-    newState.feedback = "Keep Chest Up";
-    newState.isCorrectForm = false;
-    newState.visibilityIssue = false;
-    newState.landmarksNeedingImprovement = [POSE_LANDMARKS.LEFT_SHOULDER, POSE_LANDMARKS.RIGHT_SHOULDER, POSE_LANDMARKS.LEFT_HIP, POSE_LANDMARKS.RIGHT_HIP];
-    return newState;
-  }
-
-  // If form passes check
-  newState.isCorrectForm = true;
-  newState.visibilityIssue = false;
-  newState.landmarksNeedingImprovement = [];
-
-  // Rep Counting
-  if (kneeAngle >= UP_THRESH) {
-    if (state.stage === 'DOWN') {
-      newState.count = state.count + 1;
-      newState.stage = 'UP';
-      newState.feedback = "Good Squat!";
+  const imageW = 640;
+  const imageH = 480;
+  
+  // Use the robust squat counter but with better warning logic
+  squatCounter.update(landmarks, imageW, imageH, 'right');
+  const counterState = squatCounter.getState();
+  
+  let newState: ExerciseState = {
+    count: counterState.count,
+    feedback: counterState.warning,
+    isCorrectForm: counterState.warning === '',
+    stage: counterState.state === 'UP' ? 'UP' : counterState.state === 'DOWN' ? 'DOWN' : 'NEUTRAL',
+    visibilityIssue: counterState.warning.includes('visible') || counterState.warning.includes('frame'),
+    landmarksNeedingImprovement: []
+  };
+  
+  // Provide better feedback based on state when no warning
+  if (!counterState.warning) {
+    if (counterState.state === 'UP') {
+      newState.feedback = 'Squat Down';
+    } else if (counterState.state === 'DOWN') {
+      newState.feedback = 'Stand Up';
     } else {
-      newState.stage = 'UP';
-      newState.feedback = "Squat Down";
-    }
-  } else if (kneeAngle <= DOWN_THRESH) {
-    newState.stage = 'DOWN';
-    newState.feedback = "Stand Up";
-  } else {
-    // Intermediate states
-    if (state.stage === 'UP') {
-      newState.feedback = "Lowering...";
-    } else if (state.stage === 'DOWN') {
-      newState.feedback = "Rising...";
-    } else {
-      newState.feedback = "Get Ready";
+      newState.feedback = 'Get Ready';
     }
   }
-
+  
+  // Determine which landmarks need improvement based on warning
+  if (counterState.warning.includes('visible') || counterState.warning.includes('frame')) {
+    newState.landmarksNeedingImprovement = [
+      POSE_LANDMARKS.LEFT_HIP,
+      POSE_LANDMARKS.RIGHT_HIP,
+      POSE_LANDMARKS.LEFT_KNEE,
+      POSE_LANDMARKS.RIGHT_KNEE
+    ];
+  } else if (counterState.warning.includes('hips') || counterState.warning.includes('knees')) {
+    newState.landmarksNeedingImprovement = [
+      POSE_LANDMARKS.LEFT_HIP,
+      POSE_LANDMARKS.RIGHT_HIP,
+      POSE_LANDMARKS.LEFT_KNEE,
+      POSE_LANDMARKS.RIGHT_KNEE
+    ];
+  } else if (counterState.warning.includes('chest') || counterState.warning.includes('lean')) {
+    newState.landmarksNeedingImprovement = [
+      POSE_LANDMARKS.LEFT_SHOULDER,
+      POSE_LANDMARKS.RIGHT_SHOULDER,
+      POSE_LANDMARKS.LEFT_HIP,
+      POSE_LANDMARKS.RIGHT_HIP
+    ];
+  } else if (counterState.warning.includes('knee') && counterState.warning.includes('foot')) {
+    newState.landmarksNeedingImprovement = [
+      POSE_LANDMARKS.LEFT_KNEE,
+      POSE_LANDMARKS.RIGHT_KNEE,
+      POSE_LANDMARKS.LEFT_ANKLE,
+      POSE_LANDMARKS.RIGHT_ANKLE
+    ];
+  } else if (counterState.warning.includes('Stand up')) {
+    newState.landmarksNeedingImprovement = [
+      POSE_LANDMARKS.LEFT_KNEE,
+      POSE_LANDMARKS.RIGHT_KNEE
+    ];
+  }
+  
   return newState;
 };
 
